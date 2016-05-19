@@ -30,11 +30,12 @@ namespace FeedlyHelper
             if (verb == "mark-as-read")
             {
                 string category = null;
-                int minimalEngagement = -1;
-                bool auto = false;
-                int interval = 0;
-                int minAge = 0;
-                Queue<string> queue = new Queue<string>(args);
+                var minimalEngagement = -1;
+                var auto = false;
+                var interval = 0;
+                var minAge = 0;
+                var removeDuplicates = false;
+                var queue = new Queue<string>(args);
                 try
                 {
                     while (queue.Any())
@@ -60,6 +61,11 @@ namespace FeedlyHelper
                         {
                             minAge = Convert.ToInt32(queue.Dequeue());
                         }
+                        if (queueItem == "--remove-duplicates")
+                        {
+                            removeDuplicates = true;
+                        }
+
                     }
                 }
                 catch (Exception e)
@@ -85,12 +91,14 @@ namespace FeedlyHelper
                     //var stopWords1 = new[] { "icymi", "youtrack", "wordpress", "yii", "php", "ruby", "objective-c", "clojure", "kotlin", "laravel", "watchos", "zfs", "rocksdb", "xcode", "ionic", " rails", "gcc", "collective #", "sponsored post" };
                     //                var toMarkAsRead1 = unreadItItems1.Where(item => item?.Title != null).Where(item => { return stopWords1.Any(sw => item.Title.ToLower().Contains(sw.ToLower())); }).Concat().ToArray();
                     Console.Out.WriteLine("Selecting items to mark as read...");
-                    var toMarkAsRead1 = unreadNewsItems1.Where(item => item.Engagement < minimalEngagement && item.CrawledDate.CompareTo(DateTime.UtcNow.AddDays(-minAge)) < 0).OrderBy(item => item.CrawledDate).ToArray();
-                    if (toMarkAsRead1.Length > 0)
+                    var toMarkAsReadByEngagement = unreadNewsItems1.Where(item => item.Engagement < minimalEngagement && item.CrawledDate.CompareTo(DateTime.UtcNow.AddDays(-minAge)) < 0).OrderBy(item => item.CrawledDate).Select(item => new {FeedlyEntry = item, Reason = "Engagement < " + minimalEngagement}).ToArray();
+                    var toMarkAsReadDuplicates = unreadNewsItems1.Except(toMarkAsReadByEngagement.Select(x => x.FeedlyEntry)).GroupBy(item => item.Title).Where(items => items.Count() > 1).Select(items => new {FeedlyEntry = items.OrderBy(x => x.Engagement).First(), Reason = "Duplicates: " + string.Join("; ", items.Select(item => "[" + item.Engagement + "]"))}).ToArray();
+                    var toMarkAsRead = toMarkAsReadByEngagement.Concat(toMarkAsReadDuplicates).ToArray();
+                    if (toMarkAsRead.Length > 0)
                     {
-                        foreach (var item1 in toMarkAsRead1)
+                        foreach (var actionItem in toMarkAsRead)
                         {
-                            Console.Out.WriteLine("Want to mark as read: " + item1.CrawledDate + " " + item1.Title.Replace("\n", "") + " [" + item1.Engagement + "]");
+                            Console.Out.WriteLine("Want to mark as read: " + actionItem.FeedlyEntry.CrawledDate + " " + actionItem.FeedlyEntry.Title.Replace("\n", "") + " [" + actionItem.FeedlyEntry.Engagement + "]. Reason: " + actionItem.Reason);
                         }
                         bool approved;
                         if (auto)
@@ -105,11 +113,11 @@ namespace FeedlyHelper
                         }
                         if (approved)
                         {
-                            Console.Out.WriteLine("Marking as read {0} items...", toMarkAsRead1.Length);
+                            Console.Out.WriteLine("Marking as read {0} items...", toMarkAsRead.Length);
                             var markAsReadRequest1 = new RestRequest("markers");
                             markAsReadRequest1.Method = Method.POST;
                             markAsReadRequest1.RequestFormat = DataFormat.Json;
-                            markAsReadRequest1.AddBody(new {type = "entries", entryIds = toMarkAsRead1.Select(item => item.Id).ToArray(), action = "markAsRead"});
+                            markAsReadRequest1.AddBody(new {type = "entries", entryIds = toMarkAsRead.Select(item => item.FeedlyEntry.Id).ToArray(), action = "markAsRead"});
                             markAsReadRequest1.AddHeader("Authorization", "OAuth " + authToken);
                             var markAsReadResponse1 = client1.Execute(markAsReadRequest1);
                             if (markAsReadResponse1.ErrorException != null)
