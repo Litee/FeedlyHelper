@@ -87,54 +87,62 @@ namespace FeedlyHelper
                     var client1 = new RestClient {BaseUrl = new Uri("https://cloud.feedly.com/v3/")};
                     //var unreadItItems1 = GetStreamItems(client1, "A - Programming").Concat(GetStreamItems(client1, "Engineering Blogs")).Concat(GetStreamItems(client1, "A - IT Many News"));
                     //                var unreadNewsItems1 = GetStreamItems(client1, "A - News");
-                    var unreadNewsItems1 = GetStreamItems(client1, category, userId, authToken);
-                    //var stopWords1 = new[] { "icymi", "youtrack", "wordpress", "yii", "php", "ruby", "objective-c", "clojure", "kotlin", "laravel", "watchos", "zfs", "rocksdb", "xcode", "ionic", " rails", "gcc", "collective #", "sponsored post" };
-                    //                var toMarkAsRead1 = unreadItItems1.Where(item => item?.Title != null).Where(item => { return stopWords1.Any(sw => item.Title.ToLower().Contains(sw.ToLower())); }).Concat().ToArray();
-                    Console.Out.WriteLine("Selecting items to mark as read...");
-                    var toMarkAsReadByEngagement = unreadNewsItems1.Where(item => item.Engagement < minimalEngagement && item.CrawledDate.CompareTo(DateTime.UtcNow.AddDays(-minAge)) < 0).OrderBy(item => item.CrawledDate).Select(item => new {FeedlyEntry = item, Reason = "Engagement < " + minimalEngagement}).ToArray();
-                    var toMarkAsReadDuplicates = unreadNewsItems1.Except(toMarkAsReadByEngagement.Select(x => x.FeedlyEntry)).GroupBy(item => item.Title).Where(items => items.Count() > 1).Select(items => new {FeedlyEntry = items.OrderBy(x => x.Engagement).First(), Reason = "Duplicates: " + string.Join("; ", items.Select(item => "[" + item.Engagement + "]"))}).ToArray();
-                    var toMarkAsRead = toMarkAsReadByEngagement.Concat(toMarkAsReadDuplicates).ToArray();
-                    if (toMarkAsRead.Length > 0)
+                    try
                     {
-                        foreach (var actionItem in toMarkAsRead)
+                        var unreadNewsItems1 = GetStreamItems(client1, category, userId, authToken);
+                        //var stopWords1 = new[] { "icymi", "youtrack", "wordpress", "yii", "php", "ruby", "objective-c", "clojure", "kotlin", "laravel", "watchos", "zfs", "rocksdb", "xcode", "ionic", " rails", "gcc", "collective #", "sponsored post" };
+                        //                var toMarkAsRead1 = unreadItItems1.Where(item => item?.Title != null).Where(item => { return stopWords1.Any(sw => item.Title.ToLower().Contains(sw.ToLower())); }).Concat().ToArray();
+                        Console.Out.WriteLine("Selecting items to mark as read...");
+                        var toMarkAsReadByEngagement = unreadNewsItems1.Where(item => item.Engagement < minimalEngagement && item.CrawledDate.CompareTo(DateTime.UtcNow.AddDays(-minAge)) < 0).OrderBy(item => item.CrawledDate).Select(item => new {FeedlyEntry = item, Reason = "Engagement < " + minimalEngagement}).ToArray();
+                        var toMarkAsReadDuplicates = unreadNewsItems1.Except(toMarkAsReadByEngagement.Select(x => x.FeedlyEntry)).GroupBy(item => item.Title).Where(items => items.Count() > 1).Select(items => new {FeedlyEntry = items.OrderBy(x => x.Engagement).First(), Reason = "Duplicates: " + string.Join("; ", items.Select(item => "[" + item.Engagement + "]"))}).ToArray();
+                        var toMarkAsRead = toMarkAsReadByEngagement.Concat(toMarkAsReadDuplicates).ToArray();
+                        if (toMarkAsRead.Length > 0)
                         {
-                            Console.Out.WriteLine("Want to mark as read: " + actionItem.FeedlyEntry.CrawledDate + " " + actionItem.FeedlyEntry.Title.Replace("\n", "") + " [" + actionItem.FeedlyEntry.Engagement + "]. Reason: " + actionItem.Reason);
-                        }
-                        bool approved;
-                        if (auto)
-                        {
-                            approved = true;
-                        }
-                        else
-                        {
-                            Console.Out.Write("Proceed? [Y/n]: ");
-                            var yesOrNo1 = Console.ReadLine();
-                            approved = yesOrNo1.Trim() == "Y";
-                        }
-                        if (approved)
-                        {
-                            Console.Out.WriteLine("Marking as read {0} items...", toMarkAsRead.Length);
-                            var markAsReadRequest1 = new RestRequest("markers");
-                            markAsReadRequest1.Method = Method.POST;
-                            markAsReadRequest1.RequestFormat = DataFormat.Json;
-                            markAsReadRequest1.AddBody(new {type = "entries", entryIds = toMarkAsRead.Select(item => item.FeedlyEntry.Id).ToArray(), action = "markAsRead"});
-                            markAsReadRequest1.AddHeader("Authorization", "OAuth " + authToken);
-                            var markAsReadResponse1 = client1.Execute(markAsReadRequest1);
-                            if (markAsReadResponse1.ErrorException != null)
+                            foreach (var actionItem in toMarkAsRead)
                             {
-                                throw markAsReadResponse1.ErrorException;
+                                Console.Out.WriteLine("Want to mark as read: " + actionItem.FeedlyEntry.CrawledDate + " " + actionItem.FeedlyEntry.Title.Replace("\n", "") + " [" + actionItem.FeedlyEntry.Engagement + "]. Reason: " + actionItem.Reason);
                             }
+                            bool approved;
+                            if (auto)
+                            {
+                                approved = true;
+                            }
+                            else
+                            {
+                                Console.Out.Write("Proceed? [Y/n]: ");
+                                var yesOrNo1 = Console.ReadLine();
+                                approved = yesOrNo1.Trim() == "Y";
+                            }
+                            if (approved)
+                            {
+                                Console.Out.WriteLine("Marking as read {0} items...", toMarkAsRead.Length);
+                                var markAsReadRequest1 = new RestRequest("markers");
+                                markAsReadRequest1.Method = Method.POST;
+                                markAsReadRequest1.RequestFormat = DataFormat.Json;
+                                markAsReadRequest1.AddBody(new {type = "entries", entryIds = toMarkAsRead.Select(item => item.FeedlyEntry.Id).ToArray(), action = "markAsRead"});
+                                markAsReadRequest1.AddHeader("Authorization", "OAuth " + authToken);
+                                var markAsReadResponse1 = client1.Execute(markAsReadRequest1);
+                                if (markAsReadResponse1.ErrorException != null)
+                                {
+                                    throw markAsReadResponse1.ErrorException;
+                                }
 
-                            Console.Out.WriteLine("Done!");
+                                Console.Out.WriteLine("Done!");
+                            }
+                            else
+                            {
+                                Console.Out.WriteLine("Doing nothing...");
+                            }
                         }
                         else
                         {
-                            Console.Out.WriteLine("Doing nothing...");
+                            Console.Out.WriteLine("No items to mark as read.");
                         }
                     }
-                    else
+                    catch (Exception e)
                     {
-                        Console.Out.WriteLine("No items to mark as read.");
+                        Console.WriteLine("Error happended: {0}", e.Message);
+                        Console.WriteLine(e.StackTrace);
                     }
                     if (interval > 0)
                     {
