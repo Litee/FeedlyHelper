@@ -94,7 +94,7 @@ namespace FeedlyHelper
                         //                var toMarkAsRead1 = unreadItItems1.Where(item => item?.Title != null).Where(item => { return stopWords1.Any(sw => item.Title.ToLower().Contains(sw.ToLower())); }).Concat().ToArray();
                         Console.Out.WriteLine("Selecting items to mark as read...");
                         var toMarkAsReadByEngagement = unreadNewsItems1.Where(item => item.Engagement < minimalEngagement && item.CrawledDate.CompareTo(DateTime.UtcNow.AddDays(-minAge)) < 0).OrderBy(item => item.CrawledDate).Select(item => new {FeedlyEntry = item, Reason = "Engagement < " + minimalEngagement}).ToArray();
-                        var toMarkAsReadDuplicates = unreadNewsItems1.Except(toMarkAsReadByEngagement.Select(x => x.FeedlyEntry)).GroupBy(item => item.Title).Where(items => items.Count() > 1).Select(items => new {FeedlyEntry = items.OrderBy(x => x.Engagement).First(), Reason = "Duplicates: " + string.Join("; ", items.Select(item => "[" + item.Engagement + "]"))}).ToArray();
+                        var toMarkAsReadDuplicates = unreadNewsItems1.Where(x => x.Title != null).Except(toMarkAsReadByEngagement.Select(x => x.FeedlyEntry)).GroupBy(item => item.Title).Where(items => items.Count() > 1).Select(items => new {FeedlyEntry = items.OrderBy(x => x.Engagement).First(), Reason = "Duplicates: " + string.Join("; ", items.Select(item => "[" + item.Engagement + "]"))}).ToArray();
                         var toMarkAsRead = toMarkAsReadByEngagement.Concat(toMarkAsReadDuplicates).ToArray();
                         if (toMarkAsRead.Length > 0)
                         {
@@ -163,7 +163,8 @@ namespace FeedlyHelper
             var request = new RestRequest("streams/contents");
             request.Method = Method.GET;
             request.AddHeader("Authorization", "OAuth " + authToken);
-            request.AddQueryParameter("streamId", "user/" + userId + "/category/" + categoryName);
+            var streamId = "user/" + userId + "/category/" + (string.IsNullOrEmpty(categoryName) ? "global.all" : categoryName);
+            request.AddQueryParameter("streamId", streamId);
             request.AddQueryParameter("count", "1000");
             request.AddQueryParameter("unreadOnly", "true");
 
@@ -175,6 +176,11 @@ namespace FeedlyHelper
                 throw response.ErrorException;
             }
             var stream = response.Data;
+            if (stream?.Items == null)
+            {
+                Console.Out.WriteLine("Nothing fetched!");
+                return new List<Item>();
+            }
             Console.Out.WriteLine("{0} items fetched!", stream.Items.Count);
             return stream.Items;
         }
