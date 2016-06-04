@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using RestSharp;
+using System.Net;
 
 namespace FeedlyHelper
 {
@@ -174,6 +175,11 @@ namespace FeedlyHelper
             {
                 Console.Out.WriteLine("ERROR: Something went wrong:");
                 throw response.ErrorException;
+            }
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                Console.Out.WriteLine("ERROR: Server replied " + response.StatusCode);
+                return new List<Item>();
             }
             var stream = response.Data;
             if (stream?.Items == null)
